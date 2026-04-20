@@ -1,573 +1,422 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Users, Shuffle, Printer, AlertCircle, Copy, Check, Info, Save, FolderOpen, Trash2, CheckCircle2 } from 'lucide-react';
-import { initializeApp } from 'firebase/app';
-import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
-import { getFirestore, collection, onSnapshot, doc, deleteDoc, addDoc } from 'firebase/firestore';
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>풍양중학교 모둠 편성기</title>
+  
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-// Firebase Setup (Canvas 환경 및 Vercel 배포 겸용)
-const userFirebaseConfig = {
-  apiKey: "AIzaSyDVk0xKbUykia3dpmP0PMMxoVExRgPOo-o",
-  authDomain: "test-dafb1.firebaseapp.com",
-  databaseURL: "https://test-dafb1.firebaseio.com",
-  projectId: "test-dafb1",
-  storageBucket: "test-dafb1.firebasestorage.app",
-  messagingSenderId: "842762232815",
-  appId: "1:842762232815:web:a4bcfac346712ef2250c1a"
-};
+  <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-auth-compat.js"></script>
+</head>
+<body>
+  <div id="root"></div>
 
-let app, auth, db;
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'pungyang-groups';
-try {
-  // 캔버스 환경 변수가 있으면 우선 사용, 없으면 제공해주신 설정 사용 (Vercel 배포 시 자동 적용)
-  const firebaseConfig = typeof __firebase_config !== 'undefined' && __firebase_config 
-    ? JSON.parse(__firebase_config) 
-    : userFirebaseConfig;
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
 
-  if (firebaseConfig) {
-    app = initializeApp(firebaseConfig);
-    auth = getAuth(app);
-    db = getFirestore(app);
-  }
-} catch (e) {
-  console.error("Firebase 초기화 에러:", e);
-}
+    // --- 아이콘 컴포넌트 (외부 라이브러리 대신 직접 구현) ---
+    const IconUsers = () => <svg className="w-8 h-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>;
+    const IconShuffle = ({ spinning }) => <svg className={`w-6 h-6 ${spinning ? 'animate-spin' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M16 3h5v5"/><path d="M4 20L21 3"/><path d="M21 16v5h-5"/><path d="M15 15l6 6"/><path d="M4 4l5 5"/></svg>;
+    const IconPrinter = () => <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>;
+    const IconCopy = () => <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>;
+    const IconCheck = () => <svg className="w-4 h-4 text-green-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="20 6 9 17 4 12"/></svg>;
+    const IconSave = () => <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>;
+    const IconFolderOpen = () => <svg className="w-5 h-5 text-indigo-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m6 14 1.45-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.55 6a2 2 0 0 1-1.94 1.5H4a2 2 0 0 1-2-2V5c0-1.1.9-2 2-2h3.93a2 2 0 0 1 1.66.9l.82 1.2a2 2 0 0 0 1.66.9H18a2 2 0 0 1 2 2v2"/></svg>;
+    const IconTrash2 = () => <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>;
 
-export default function App() {
-  const [grade, setGrade] = useState('');
-  const [classNum, setClassNum] = useState('');
-  const [studentData, setStudentData] = useState('');
-  const [groupSize, setGroupSize] = useState(4);
-  const [generatedGroups, setGeneratedGroups] = useState([]);
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [errorMsg, setErrorMsg] = useState('');
-  const [copied, setCopied] = useState(false);
+    // --- Firebase 초기화 ---
+    const firebaseConfig = {
+      apiKey: "AIzaSyDVk0xKbUykia3dpmP0PMMxoVExRgPOo-o",
+      authDomain: "test-dafb1.firebaseapp.com",
+      databaseURL: "https://test-dafb1.firebaseio.com",
+      projectId: "test-dafb1",
+      storageBucket: "test-dafb1.firebasestorage.app",
+      messagingSenderId: "842762232815",
+      appId: "1:842762232815:web:a4bcfac346712ef2250c1a"
+    };
 
-  // 명단 및 모둠 저장용 상태 추가
-  const [user, setUser] = useState(null);
-  const [savedRosters, setSavedRosters] = useState([]);
-  const [savedGroupsList, setSavedGroupsList] = useState([]); // 모둠 결과 저장용 상태
-  const [successMsg, setSuccessMsg] = useState('');
+    if (!firebase.apps.length) {
+      firebase.initializeApp(firebaseConfig);
+    }
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+    const APP_ID = 'pungyang-groups';
 
-  // Firebase Auth 및 DB 리스너 설정
-  useEffect(() => {
-    if (!auth) return;
-    const initAuth = async () => {
-      try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          await signInAnonymously(auth);
+    function App() {
+      const [grade, setGrade] = useState('');
+      const [classNum, setClassNum] = useState('');
+      const [studentData, setStudentData] = useState('');
+      const [groupSize, setGroupSize] = useState(4);
+      const [generatedGroups, setGeneratedGroups] = useState([]);
+      const [isGenerating, setIsGenerating] = useState(false);
+      
+      const [errorMsg, setErrorMsg] = useState('');
+      const [successMsg, setSuccessMsg] = useState('');
+      const [copied, setCopied] = useState(false);
+
+      const [user, setUser] = useState(null);
+      const [isLocalMode, setIsLocalMode] = useState(false); 
+      const [savedRosters, setSavedRosters] = useState([]);
+      const [savedGroupsList, setSavedGroupsList] = useState([]);
+
+      // 익명 로그인 및 리스너
+      useEffect(() => {
+        // 권한 에러 발생 시 불필요한 로그 출력을 줄이고 조용히 로컬 모드로 넘깁니다.
+        auth.signInAnonymously().catch(() => {
+          setIsLocalMode(true);
+          setErrorMsg("Firebase '익명 로그인'이 비활성화 되어있습니다. 현재 기기에만 임시 저장됩니다. (해결: Firebase 콘솔 > Authentication > Sign-in method > 익명 사용 설정)");
+        });
+        
+        const unsubscribe = auth.onAuthStateChanged((u) => {
+          if (u) {
+            setUser(u);
+            setIsLocalMode(false);
+          }
+        });
+        return () => unsubscribe();
+      }, []);
+
+      // DB 데이터 불러오기 (로컬 모드 지원)
+      useEffect(() => {
+        if (isLocalMode) {
+          try {
+            const localRosters = JSON.parse(localStorage.getItem('pungyang_rosters') || '[]');
+            setSavedRosters(localRosters);
+            const localGroups = JSON.parse(localStorage.getItem('pungyang_groups') || '[]');
+            setSavedGroupsList(localGroups);
+          } catch (e) {}
+          return;
         }
-      } catch (error) {
-        console.error("인증 에러:", error);
-      }
-    };
-    initAuth();
-    const unsubscribe = onAuthStateChanged(auth, setUser);
-    return () => unsubscribe();
-  }, []);
 
-  // 저장된 데이터 (명단 및 모둠) 불러오기
-  useEffect(() => {
-    if (!user || !db) return;
-    
-    // 1. 명단 리스너
-    const rostersRef = collection(db, 'artifacts', appId, 'users', user.uid, 'savedRosters');
-    const unsubscribeRosters = onSnapshot(rostersRef, (snapshot) => {
-      const rosters = [];
-      snapshot.forEach((doc) => rosters.push({ id: doc.id, ...doc.data() }));
-      rosters.sort((a, b) => b.createdAt - a.createdAt);
-      setSavedRosters(rosters);
-    }, (error) => console.error("명단 불러오기 에러:", error));
+        if (!user) return;
+        
+        // 1. 명단 불러오기
+        const rostersRef = db.collection('artifacts').doc(APP_ID).collection('users').doc(user.uid).collection('savedRosters');
+        const unsubRosters = rostersRef.onSnapshot(snapshot => {
+          const rosters = [];
+          snapshot.forEach(doc => rosters.push({ id: doc.id, ...doc.data() }));
+          rosters.sort((a, b) => b.createdAt - a.createdAt);
+          setSavedRosters(rosters);
+        });
 
-    // 2. 편성된 모둠 결과 리스너
-    const groupsRef = collection(db, 'artifacts', appId, 'users', user.uid, 'savedGroups');
-    const unsubscribeGroups = onSnapshot(groupsRef, (snapshot) => {
-      const groups = [];
-      snapshot.forEach((doc) => groups.push({ id: doc.id, ...doc.data() }));
-      groups.sort((a, b) => b.createdAt - a.createdAt);
-      setSavedGroupsList(groups);
-    }, (error) => console.error("모둠 불러오기 에러:", error));
+        // 2. 모둠 결과 불러오기
+        const groupsRef = db.collection('artifacts').doc(APP_ID).collection('users').doc(user.uid).collection('savedGroups');
+        const unsubGroups = groupsRef.onSnapshot(snapshot => {
+          const groups = [];
+          snapshot.forEach(doc => groups.push({ id: doc.id, ...doc.data() }));
+          groups.sort((a, b) => b.createdAt - a.createdAt);
+          setSavedGroupsList(groups);
+        });
 
-    return () => {
-      unsubscribeRosters();
-      unsubscribeGroups();
-    };
-  }, [user]);
+        return () => {
+          unsubRosters();
+          unsubGroups();
+        };
+      }, [user, isLocalMode]);
 
-  // 명단 저장 함수
-  const handleSaveRoster = async () => {
-    if (!db || !user) {
-      setErrorMsg('DB 연결 오류: Vercel 배포 시 별도 Firebase 설정이 필요합니다.');
-      return;
-    }
-    if (!grade || !classNum || !studentData.trim()) {
-      setErrorMsg('학년, 반, 학생 명단을 모두 입력해야 저장할 수 있습니다.');
-      return;
-    }
+      const showSuccess = (msg) => {
+        setSuccessMsg(msg);
+        setTimeout(() => setSuccessMsg(''), 3000);
+      };
 
-    try {
-      const rostersRef = collection(db, 'artifacts', appId, 'users', user.uid, 'savedRosters');
-      await addDoc(rostersRef, {
-        grade,
-        classNum,
-        studentData,
-        title: `${grade}학년 ${classNum}반`,
-        createdAt: Date.now()
-      });
-      setSuccessMsg(`${grade}학년 ${classNum}반 명단이 저장되었습니다!`);
-      setTimeout(() => setSuccessMsg(''), 3000);
-      setErrorMsg('');
-    } catch (error) {
-      setErrorMsg('명단 저장에 실패했습니다.');
-    }
-  };
+      // 명단 저장
+      const handleSaveRoster = async () => {
+        if (!grade || !classNum || !studentData.trim()) {
+          setErrorMsg('학년, 반, 학생 명단을 모두 입력해야 저장할 수 있습니다.');
+          return;
+        }
+        
+        const title = `${grade}학년 ${classNum}반`;
+        const createdAt = Date.now();
 
-  // 저장된 명단 세팅 함수
-  const handleLoadRoster = (roster) => {
-    setGrade(roster.grade);
-    setClassNum(roster.classNum);
-    setStudentData(roster.studentData);
-    setSuccessMsg(`${roster.title} 명단을 불러왔습니다.`);
-    setTimeout(() => setSuccessMsg(''), 3000);
-    setErrorMsg('');
-  };
+        if (isLocalMode) {
+          const newDoc = { id: createdAt.toString(), grade, classNum, studentData, title, createdAt };
+          const updated = [newDoc, ...savedRosters].sort((a,b) => b.createdAt - a.createdAt);
+          localStorage.setItem('pungyang_rosters', JSON.stringify(updated));
+          setSavedRosters(updated);
+          showSuccess(`${title} 명단이 브라우저에 임시 저장되었습니다!`);
+          return;
+        }
 
-  // 명단 삭제 함수
-  const handleDeleteRoster = async (id, title) => {
-    if (!db || !user) return;
-    try {
-      await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'savedRosters', id));
-      setSuccessMsg(`${title} 명단이 삭제되었습니다.`);
-      setTimeout(() => setSuccessMsg(''), 3000);
-    } catch (error) {
-      setErrorMsg('삭제에 실패했습니다.');
-    }
-  };
+        if (!user) {
+          setErrorMsg('로그인 상태를 확인할 수 없습니다.');
+          return;
+        }
 
-  // 모둠 결과 저장 함수
-  const handleSaveGroups = async () => {
-    if (!db || !user) {
-      setErrorMsg('DB 연결 오류입니다.');
-      return;
-    }
-    if (generatedGroups.length === 0) {
-      setErrorMsg('저장할 모둠 편성 결과가 없습니다.');
-      return;
-    }
+        try {
+          await db.collection('artifacts').doc(APP_ID).collection('users').doc(user.uid).collection('savedRosters').add({
+            grade, classNum, studentData, title, createdAt
+          });
+          showSuccess(`${title} 명단이 저장되었습니다!`);
+          setErrorMsg('');
+        } catch (error) {
+          setErrorMsg('명단 저장에 실패했습니다. Firebase 데이터베이스 규칙을 확인하세요.');
+        }
+      };
 
-    const title = `${grade ? grade + '학년 ' : ''}${classNum ? classNum + '반 ' : ''}(${groupSize}명씩) 편성결과`;
+      // 모둠 저장
+      const handleSaveGroups = async () => {
+        if (generatedGroups.length === 0) {
+          setErrorMsg('저장할 모둠 편성 결과가 없습니다.');
+          return;
+        }
+        
+        const title = `${grade ? grade + '학년 ' : ''}${classNum ? classNum + '반 ' : ''}(${groupSize}명씩) 편성결과`;
+        const createdAt = Date.now();
 
-    try {
-      const groupsRef = collection(db, 'artifacts', appId, 'users', user.uid, 'savedGroups');
-      await addDoc(groupsRef, {
-        grade,
-        classNum,
-        groupSize,
-        // 2차원 배열은 객체 배열 형태로 변환하여 저장
-        groupsData: generatedGroups.map(group => ({ members: group })),
-        title: title.trim() || '이름 없는 모둠',
-        createdAt: Date.now()
-      });
-      setSuccessMsg(`모둠 편성 결과가 저장되었습니다!`);
-      setTimeout(() => setSuccessMsg(''), 3000);
-    } catch (error) {
-      setErrorMsg('모둠 저장에 실패했습니다.');
-    }
-  };
+        if (isLocalMode) {
+          const newDoc = {
+            id: createdAt.toString(), grade, classNum, groupSize,
+            groupsData: generatedGroups.map(group => ({ members: group })),
+            title: title.trim() || '이름 없는 모둠',
+            createdAt
+          };
+          const updated = [newDoc, ...savedGroupsList].sort((a,b) => b.createdAt - a.createdAt);
+          localStorage.setItem('pungyang_groups', JSON.stringify(updated));
+          setSavedGroupsList(updated);
+          showSuccess(`모둠 편성 결과가 브라우저에 임시 저장되었습니다!`);
+          return;
+        }
 
-  // 모둠 결과 불러오기 함수
-  const handleLoadGroups = (groupData) => {
-    setGrade(groupData.grade || '');
-    setClassNum(groupData.classNum || '');
-    setGroupSize(groupData.groupSize || 4);
-    
-    // 저장 시 변환했던 객체 배열을 원상복구
-    const restoredGroups = groupData.groupsData.map(g => g.members);
-    setGeneratedGroups(restoredGroups);
-    
-    setSuccessMsg(`${groupData.title} 결과를 불러왔습니다.`);
-    setTimeout(() => setSuccessMsg(''), 3000);
-    setErrorMsg('');
-  };
+        if (!user) {
+          setErrorMsg('로그인 상태를 확인할 수 없습니다.');
+          return;
+        }
 
-  // 모둠 결과 삭제 함수
-  const handleDeleteGroups = async (id, title) => {
-    if (!db || !user) return;
-    try {
-      await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'savedGroups', id));
-      setSuccessMsg(`${title} 삭제 완료.`);
-      setTimeout(() => setSuccessMsg(''), 3000);
-    } catch (error) {
-      setErrorMsg('삭제에 실패했습니다.');
-    }
-  };
+        try {
+          await db.collection('artifacts').doc(APP_ID).collection('users').doc(user.uid).collection('savedGroups').add({
+            grade, classNum, groupSize,
+            groupsData: generatedGroups.map(group => ({ members: group })),
+            title: title.trim() || '이름 없는 모둠',
+            createdAt
+          });
+          showSuccess(`모둠 편성 결과가 저장되었습니다!`);
+        } catch (error) {
+          setErrorMsg('모둠 저장에 실패했습니다. Firebase 데이터베이스 규칙을 확인하세요.');
+        }
+      };
 
-  // 스프레드시트에서 복사한 텍스트를 배열로 파싱
-  const parseStudents = (text) => {
-    return text
-      .split('\n')
-      .map((line) => line.trim())
-      .filter((line) => line.length > 0); // 빈 줄 제거
-  };
+      // 데이터 삭제
+      const handleDeleteData = async (collectionName, id, title) => {
+        if (isLocalMode) {
+          if (collectionName === 'savedRosters') {
+             const updated = savedRosters.filter(r => r.id !== id);
+             localStorage.setItem('pungyang_rosters', JSON.stringify(updated));
+             setSavedRosters(updated);
+          } else {
+             const updated = savedGroupsList.filter(g => g.id !== id);
+             localStorage.setItem('pungyang_groups', JSON.stringify(updated));
+             setSavedGroupsList(updated);
+          }
+          showSuccess(`${title} 삭제 완료.`);
+          return;
+        }
 
-  // 피셔-예이츠 셔플 (랜덤 섞기)
-  const shuffleArray = (array) => {
-    const newArr = [...array];
-    for (let i = newArr.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [newArr[i], newArr[j]] = [newArr[j], newArr[i]];
-    }
-    return newArr;
-  };
+        if (!user) {
+          setErrorMsg('데이터베이스에 접근할 수 없어 삭제할 수 없습니다.');
+          return;
+        }
 
-  // 모둠 생성 알고리즘 (최대한 균등하게 분배)
-  const handleGenerate = () => {
-    setErrorMsg('');
-    const students = parseStudents(studentData);
+        try {
+          await db.collection('artifacts').doc(APP_ID).collection('users').doc(user.uid).collection(collectionName).doc(id).delete();
+          showSuccess(`${title} 삭제 완료.`);
+        } catch (error) {
+          setErrorMsg('삭제에 실패했습니다.');
+        }
+      };
 
-    if (students.length === 0) {
-      setErrorMsg('학생 명단을 입력해주세요.');
-      return;
-    }
+      // 명단 파싱 및 셔플 알고리즘
+      const parseStudents = (text) => text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+      const shuffleArray = (array) => {
+        const newArr = [...array];
+        for (let i = newArr.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [newArr[i], newArr[j]] = [newArr[j], newArr[i]];
+        }
+        return newArr;
+      };
 
-    if (students.length < groupSize) {
-      setErrorMsg(`학생 수(${students.length}명)가 모둠 설정 인원(${groupSize}명)보다 적습니다.`);
-      return;
-    }
+      const handleGenerate = () => {
+        setErrorMsg('');
+        const students = parseStudents(studentData);
+        if (students.length === 0) return setErrorMsg('학생 명단을 입력해주세요.');
+        if (students.length < groupSize) return setErrorMsg(`학생 수가 모둠 설정 인원보다 적습니다.`);
 
-    setIsGenerating(true);
+        setIsGenerating(true);
+        setTimeout(() => {
+          const shuffled = shuffleArray(students);
+          const groups = Array.from({ length: Math.ceil(shuffled.length / groupSize) }, () => []);
+          shuffled.forEach((student, index) => groups[index % groups.length].push(student));
+          setGeneratedGroups(groups);
+          setIsGenerating(false);
+        }, 500);
+      };
 
-    // 섞는 애니메이션 효과를 위해 약간의 지연 시간 추가
-    setTimeout(() => {
-      const shuffled = shuffleArray(students);
-      const groups = [];
-      const numberOfGroups = Math.ceil(shuffled.length / groupSize);
-
-      // 빈 모둠 배열 생성
-      for (let i = 0; i < numberOfGroups; i++) {
-        groups.push([]);
-      }
-
-      // 학생들을 각 모둠에 순차적으로 배분 (균등 분배를 위해)
-      shuffled.forEach((student, index) => {
-        groups[index % numberOfGroups].push(student);
-      });
-
-      setGeneratedGroups(groups);
-      setIsGenerating(false);
-    }, 500);
-  };
-
-  // 인쇄 기능
-  const handlePrint = () => {
-    window.print();
-  };
-
-  // 텍스트 복사 기능
-  const handleCopy = () => {
-    if (generatedGroups.length === 0) return;
-    
-    let copyText = `${grade ? `${grade}학년 ` : ''}${classNum ? `${classNum}반 ` : ''}모둠 편성 결과\n\n`;
-    
-    generatedGroups.forEach((group, index) => {
-      copyText += `[${index + 1}모둠]\n`;
-      copyText += group.join(', ') + '\n\n';
-    });
-
-    // 브라우저 클립보드 API
-    try {
+      const handleCopy = () => {
+        if (generatedGroups.length === 0) return;
+        let copyText = `${grade ? `${grade}학년 ` : ''}${classNum ? `${classNum}반 ` : ''}모둠 편성 결과\n\n`;
+        generatedGroups.forEach((group, index) => {
+          copyText += `[${index + 1}모둠]\n` + group.join(', ') + '\n\n';
+        });
         const textArea = document.createElement("textarea");
         textArea.value = copyText;
         document.body.appendChild(textArea);
         textArea.select();
         document.execCommand('copy');
         document.body.removeChild(textArea);
-        
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-        setErrorMsg('클립보드 복사에 실패했습니다.');
-    }
-  };
+      };
 
-  return (
-    <div className="min-h-screen bg-slate-50 font-sans text-slate-800 print:bg-white print:p-0">
-      
-      {/* 헤더 섹션 - 인쇄 시 숨김 */}
-      <header className="bg-indigo-600 text-white shadow-md print:hidden">
-        <div className="max-w-5xl mx-auto px-4 py-6 flex items-center gap-3">
-          <Users className="w-8 h-8" />
-          <h1 className="text-2xl font-bold tracking-tight">풍양중학교 모둠 편성기</h1>
-        </div>
-      </header>
-
-      <main className="max-w-5xl mx-auto px-4 py-8 space-y-8">
-        
-        {/* 에러 메시지 팝업 */}
-        {errorMsg && (
-          <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-md shadow-sm print:hidden flex items-start justify-between">
-            <div className="flex items-center gap-3">
-              <AlertCircle className="w-5 h-5 text-red-500" />
-              <p className="text-red-700 font-medium">{errorMsg}</p>
+      return (
+        <div className="min-h-screen bg-slate-50 font-sans text-slate-800 print:bg-white print:p-0 pb-16">
+          <header className="bg-indigo-600 text-white shadow-md print:hidden">
+            <div className="max-w-5xl mx-auto px-4 py-6 flex items-center gap-3">
+              <IconUsers />
+              <h1 className="text-2xl font-bold tracking-tight">풍양중학교 모둠 편성기</h1>
             </div>
-            <button onClick={() => setErrorMsg('')} className="text-red-400 hover:text-red-600">
-              ✕
-            </button>
-          </div>
-        )}
+          </header>
 
-        {/* 성공 메시지 팝업 */}
-        {successMsg && (
-          <div className="bg-green-50 border-l-4 border-green-500 p-4 rounded-md shadow-sm print:hidden flex items-start justify-between">
-            <div className="flex items-center gap-3">
-              <CheckCircle2 className="w-5 h-5 text-green-500" />
-              <p className="text-green-700 font-medium">{successMsg}</p>
-            </div>
-            <button onClick={() => setSuccessMsg('')} className="text-green-400 hover:text-green-600">
-              ✕
-            </button>
-          </div>
-        )}
-
-        {/* 저장된 데이터 불러오기 섹션 */}
-        {(savedRosters.length > 0 || savedGroupsList.length > 0) && (
-          <section className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 print:hidden">
-            <h2 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
-              <FolderOpen className="w-5 h-5 text-indigo-500" />
-              저장된 데이터 불러오기
-            </h2>
+          <main className="max-w-5xl mx-auto px-4 py-8 space-y-8">
             
-            <div className="space-y-6">
-              {/* 명단 리스트 */}
-              {savedRosters.length > 0 && (
-                <div>
-                  <h3 className="text-sm font-medium text-slate-500 mb-3">학생 명단 (반) 불러오기</h3>
-                  <div className="flex flex-wrap gap-3">
-                    {savedRosters.map((roster) => (
-                      <div key={roster.id} className="flex items-center bg-slate-50 border border-slate-200 rounded-lg overflow-hidden shadow-sm">
-                        <button
-                          onClick={() => handleLoadRoster(roster)}
-                          className="px-4 py-2 hover:bg-indigo-50 text-slate-700 font-medium transition-colors border-r border-slate-200"
-                        >
-                          {roster.title}
-                        </button>
-                        <button
-                          onClick={() => handleDeleteRoster(roster.id, roster.title)}
-                          className="p-2 text-slate-400 hover:bg-red-50 hover:text-red-500 transition-colors"
-                          title="삭제"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+            {/* 알림 메시지 */}
+            {errorMsg && (
+              <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-md shadow-sm print:hidden flex justify-between items-center">
+                <p className="text-red-700 font-medium">{errorMsg}</p>
+                <button onClick={() => setErrorMsg('')} className="text-red-400 p-2">✕</button>
+              </div>
+            )}
+            {successMsg && (
+              <div className="bg-green-50 border-l-4 border-green-500 p-4 rounded-md shadow-sm print:hidden flex justify-between items-center">
+                <p className="text-green-700 font-medium flex items-center gap-2"><IconCheck /> {successMsg}</p>
+                <button onClick={() => setSuccessMsg('')} className="text-green-400 p-2">✕</button>
+              </div>
+            )}
+
+            {/* 저장된 데이터 불러오기 */}
+            {(savedRosters.length > 0 || savedGroupsList.length > 0) && (
+              <section className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 print:hidden">
+                <h2 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
+                  <IconFolderOpen /> 저장된 데이터 불러오기
+                </h2>
+                <div className="space-y-6">
+                  {savedRosters.length > 0 && (
+                    <div>
+                      <h3 className="text-sm font-medium text-slate-500 mb-3">명단 불러오기</h3>
+                      <div className="flex flex-wrap gap-3">
+                        {savedRosters.map(roster => (
+                          <div key={roster.id} className="flex items-center bg-slate-50 border border-slate-200 rounded-lg overflow-hidden shadow-sm">
+                            <button onClick={() => { setGrade(roster.grade); setClassNum(roster.classNum); setStudentData(roster.studentData); }} className="px-4 py-2 hover:bg-indigo-50 text-slate-700 font-medium border-r border-slate-200">{roster.title}</button>
+                            <button onClick={() => handleDeleteData('savedRosters', roster.id, roster.title)} className="p-2 text-slate-400 hover:text-red-500"><IconTrash2 /></button>
+                          </div>
+                        ))}
                       </div>
-                    ))}
+                    </div>
+                  )}
+                  {savedGroupsList.length > 0 && (
+                    <div>
+                      <h3 className="text-sm font-medium text-slate-500 mb-3">모둠 결과 불러오기</h3>
+                      <div className="flex flex-wrap gap-3">
+                        {savedGroupsList.map(group => (
+                          <div key={group.id} className="flex items-center bg-indigo-50 border border-indigo-100 rounded-lg overflow-hidden shadow-sm">
+                            <button onClick={() => { setGrade(group.grade||''); setClassNum(group.classNum||''); setGroupSize(group.groupSize||4); setGeneratedGroups(group.groupsData.map(g => g.members)); }} className="px-4 py-2 hover:bg-indigo-100 text-indigo-700 font-medium border-r border-indigo-200">{group.title}</button>
+                            <button onClick={() => handleDeleteData('savedGroups', group.id, group.title)} className="p-2 text-indigo-400 hover:text-red-500"><IconTrash2 /></button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </section>
+            )}
+
+            {/* 설정 영역 */}
+            <section className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 print:hidden">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="space-y-6">
+                  <div className="flex gap-4">
+                    <div className="flex-1">
+                      <label className="block text-sm font-medium text-slate-600 mb-2">학년</label>
+                      <input type="number" value={grade} onChange={e => setGrade(e.target.value)} className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" />
+                    </div>
+                    <div className="flex-1">
+                      <label className="block text-sm font-medium text-slate-600 mb-2">반</label>
+                      <input type="number" value={classNum} onChange={e => setClassNum(e.target.value)} className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-600 mb-2">모둠 당 인원</label>
+                    <div className="flex gap-2">
+                      {[3, 4, 5, 6].map(num => (
+                        <button key={num} onClick={() => setGroupSize(num)} className={`flex-1 py-3 rounded-lg font-medium border ${groupSize === num ? 'bg-indigo-100 text-indigo-700 border-indigo-500' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'}`}>{num}명</button>
+                      ))}
+                    </div>
                   </div>
                 </div>
-              )}
 
-              {/* 편성된 모둠 결과 리스트 */}
-              {savedGroupsList.length > 0 && (
-                <div>
-                  <h3 className="text-sm font-medium text-slate-500 mb-3">이전에 편성한 모둠 결과 불러오기</h3>
-                  <div className="flex flex-wrap gap-3">
-                    {savedGroupsList.map((group) => (
-                      <div key={group.id} className="flex items-center bg-indigo-50 border border-indigo-100 rounded-lg overflow-hidden shadow-sm">
-                        <button
-                          onClick={() => handleLoadGroups(group)}
-                          className="px-4 py-2 hover:bg-indigo-100 text-indigo-700 font-medium transition-colors border-r border-indigo-200"
-                        >
-                          {group.title}
-                        </button>
-                        <button
-                          onClick={() => handleDeleteGroups(group.id, group.title)}
-                          className="p-2 text-indigo-400 hover:bg-red-50 hover:text-red-500 transition-colors"
-                          title="삭제"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    ))}
+                <div className="flex flex-col">
+                  <div className="flex justify-between items-end mb-2">
+                    <label className="block text-sm font-medium text-slate-600">명단 입력 (복사/붙여넣기)</label>
+                    <button onClick={handleSaveRoster} className="flex items-center gap-1.5 px-3 py-1 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-md text-sm font-medium"><IconSave /> 명단 저장</button>
                   </div>
-                </div>
-              )}
-            </div>
-          </section>
-        )}
-
-        {/* 설정 영역 - 인쇄 시 숨김 */}
-        <section className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 print:hidden">
-          <h2 className="text-lg font-semibold text-slate-800 mb-6 flex items-center gap-2">
-            <Info className="w-5 h-5 text-indigo-500" />
-            편성 기본 설정
-          </h2>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            {/* 좌측: 학년/반 & 모둠 인원 설정 */}
-            <div className="space-y-6">
-              <div className="flex gap-4">
-                <div className="flex-1">
-                  <label className="block text-sm font-medium text-slate-600 mb-2">학년 (선택)</label>
-                  <input
-                    type="number"
-                    value={grade}
-                    onChange={(e) => setGrade(e.target.value)}
-                    placeholder="예: 3"
-                    className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all outline-none"
-                  />
-                </div>
-                <div className="flex-1">
-                  <label className="block text-sm font-medium text-slate-600 mb-2">반 (선택)</label>
-                  <input
-                    type="number"
-                    value={classNum}
-                    onChange={(e) => setClassNum(e.target.value)}
-                    placeholder="예: 5"
-                    className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all outline-none"
-                  />
+                  <textarea value={studentData} onChange={e => setStudentData(e.target.value)} className="w-full h-40 px-4 py-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 resize-none outline-none font-mono text-sm" placeholder="101 홍길동&#13;&#10;102 김철수..."></textarea>
+                  <div className="text-right mt-2"><span className="text-xs bg-slate-100 px-2 py-1 rounded">현재 입력: {parseStudents(studentData).length}명</span></div>
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-slate-600 mb-2">모둠 당 인원 (몇 명씩 묶을까요?)</label>
-                <div className="flex gap-2">
-                  {[3, 4, 5, 6].map((num) => (
-                    <button
-                      key={num}
-                      onClick={() => setGroupSize(num)}
-                      className={`flex-1 py-3 rounded-lg font-medium transition-all ${
-                        groupSize === num
-                          ? 'bg-indigo-100 text-indigo-700 border-2 border-indigo-500 shadow-sm'
-                          : 'bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100'
-                      }`}
-                    >
-                      {num}명씩
-                    </button>
+              <div className="mt-8 pt-6 border-t border-slate-100 flex justify-center">
+                <button onClick={handleGenerate} disabled={isGenerating} className={`flex items-center gap-2 px-8 py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-lg shadow-lg ${isGenerating ? 'opacity-75' : ''}`}>
+                  <IconShuffle spinning={isGenerating} /> {isGenerating ? '섞는 중...' : '랜덤 모둠 편성하기!'}
+                </button>
+              </div>
+            </section>
+
+            {/* 결과 영역 */}
+            {generatedGroups.length > 0 && (
+              <section className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 print:border-none print:shadow-none print:p-0">
+                <div className="flex flex-col sm:flex-row justify-between items-center mb-8 pb-4 border-b border-slate-200 print:border-b-2 print:border-black">
+                  <h2 className="text-2xl font-bold text-slate-800">{grade ? `${grade}학년 ` : ''}{classNum ? `${classNum}반 ` : ''}모둠 편성 결과</h2>
+                  <div className="flex flex-wrap gap-2 mt-4 sm:mt-0 print:hidden justify-center">
+                    <button onClick={handleSaveGroups} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium"><IconSave /> 모둠 저장</button>
+                    <button onClick={handleCopy} className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg font-medium">{copied ? <IconCheck /> : <IconCopy />}{copied ? '복사됨!' : '텍스트 복사'}</button>
+                    <button onClick={() => window.print()} className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg font-medium"><IconPrinter /> 인쇄 / PDF</button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 print:grid-cols-3 print:gap-4">
+                  {generatedGroups.map((group, index) => (
+                    <div key={index} className="border-2 border-slate-200 rounded-xl overflow-hidden bg-slate-50 print:border-slate-800 print:bg-white">
+                      <div className="bg-indigo-100 font-bold py-3 px-4 border-b-2 border-slate-200 flex justify-between items-center print:bg-slate-200 print:border-slate-800">
+                        <span>{index + 1} 모둠</span><span className="text-xs bg-white/50 px-2 py-1 rounded-full">{group.length}명</span>
+                      </div>
+                      <ul className="divide-y divide-slate-200 print:divide-slate-800">
+                        {group.map((student, sIdx) => (
+                          <li key={sIdx} className="px-4 py-3 font-medium print:py-2 flex items-center gap-3">
+                            <span className="w-6 h-6 rounded-full bg-slate-200 text-slate-500 text-xs flex items-center justify-center print:border print:border-slate-400 print:bg-transparent">{sIdx + 1}</span>
+                            <span className="truncate">{student}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
                   ))}
                 </div>
-                <p className="text-xs text-slate-500 mt-2">
-                  * 남는 인원은 각 모둠에 1명씩 고르게 분배됩니다.
-                </p>
-              </div>
-            </div>
+              </section>
+            )}
+          </main>
+        </div>
+      );
+    }
 
-            {/* 우측: 명단 입력 */}
-            <div className="flex flex-col">
-              <div className="flex justify-between items-end mb-2">
-                <label className="block text-sm font-medium text-slate-600">
-                  학생 명단 입력 (엑셀/스프레드시트에서 복사 후 붙여넣기)
-                </label>
-                <button
-                  onClick={handleSaveRoster}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-md text-sm font-medium transition-colors"
-                >
-                  <Save className="w-4 h-4" />
-                  현재 명단 저장
-                </button>
-              </div>
-              <textarea
-                value={studentData}
-                onChange={(e) => setStudentData(e.target.value)}
-                placeholder="101 홍길동&#13;&#10;102 김철수&#13;&#10;103 이영희&#13;&#10;... (이름, 또는 학번+이름을 줄바꿈으로 구분해서 넣어주세요)"
-                className="w-full h-40 px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all resize-none outline-none font-mono text-sm"
-              />
-              <div className="text-right mt-2">
-                 <span className="text-xs font-medium text-slate-500 bg-slate-100 px-2 py-1 rounded">
-                   현재 입력된 학생: {parseStudents(studentData).length}명
-                 </span>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-8 pt-6 border-t border-slate-100 flex justify-center">
-            <button
-              onClick={handleGenerate}
-              disabled={isGenerating}
-              className={`flex items-center gap-2 px-8 py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-lg shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-1 ${
-                isGenerating ? 'opacity-75 cursor-not-allowed' : ''
-              }`}
-            >
-              <Shuffle className={`w-6 h-6 ${isGenerating ? 'animate-spin' : ''}`} />
-              {isGenerating ? '모둠 섞는 중...' : '랜덤 모둠 편성하기!'}
-            </button>
-          </div>
-        </section>
-
-        {/* 결과 영역 */}
-        {generatedGroups.length > 0 && (
-          <section className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 print:border-none print:shadow-none print:p-0">
-            <div className="flex flex-col sm:flex-row justify-between items-center mb-8 pb-4 border-b border-slate-200 print:border-b-2 print:border-black">
-              <h2 className="text-2xl font-bold text-slate-800">
-                {grade ? `${grade}학년 ` : ''}
-                {classNum ? `${classNum}반 ` : ''}
-                모둠 편성 결과
-              </h2>
-              
-              <div className="flex flex-wrap gap-2 mt-4 sm:mt-0 print:hidden justify-center">
-                <button
-                  onClick={handleSaveGroups}
-                  className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors shadow-sm"
-                >
-                  <Save className="w-4 h-4" />
-                  현재 모둠 저장
-                </button>
-                <button
-                  onClick={handleCopy}
-                  className="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-medium transition-colors"
-                >
-                  {copied ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
-                  {copied ? '복사됨!' : '텍스트 복사'}
-                </button>
-                <button
-                  onClick={handlePrint}
-                  className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-lg font-medium transition-colors"
-                >
-                  <Printer className="w-4 h-4" />
-                  인쇄 / PDF 저장
-                </button>
-              </div>
-            </div>
-
-            {/* 모둠 테이블 그리드 */}
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 print:grid-cols-3 print:gap-4">
-              {generatedGroups.map((group, index) => (
-                <div 
-                  key={index} 
-                  className="border-2 border-slate-200 rounded-xl overflow-hidden bg-slate-50 print:border-slate-800 print:bg-white"
-                >
-                  <div className="bg-indigo-100 text-indigo-800 font-bold py-3 px-4 border-b-2 border-slate-200 print:bg-slate-200 print:text-black print:border-slate-800 flex justify-between items-center">
-                    <span>{index + 1} 모둠</span>
-                    <span className="text-xs bg-white/50 px-2 py-1 rounded-full print:border print:border-slate-400">
-                      {group.length}명
-                    </span>
-                  </div>
-                  <div className="p-0">
-                    <ul className="divide-y divide-slate-200 print:divide-slate-800">
-                      {group.map((student, studentIndex) => (
-                        <li 
-                          key={studentIndex} 
-                          className="px-4 py-3 text-slate-700 font-medium hover:bg-white transition-colors print:text-black print:py-2"
-                        >
-                          <div className="flex items-center gap-3">
-                            <span className="w-6 h-6 rounded-full bg-slate-200 text-slate-500 text-xs flex items-center justify-center print:bg-transparent print:border print:border-slate-400">
-                              {studentIndex + 1}
-                            </span>
-                            <span className="truncate">{student}</span>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* 인쇄용 꼬리말 (화면에서는 숨김) */}
-            <div className="hidden print:block mt-8 text-center text-sm text-slate-500">
-              - 풍양중학교 모둠 편성 결과 -
-            </div>
-          </section>
-        )}
-      </main>
-    </div>
-  );
-}
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
